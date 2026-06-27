@@ -5,7 +5,7 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "xingtu-db"
-database_id = "YOUR_D1_DATABASE_ID"
+database_id = "da574d22-6324-48c4-a8c9-2cc7b95a9e31"
 
 [ai]
 binding = "AI"
