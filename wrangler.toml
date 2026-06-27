@@ -1,0 +1,15 @@
+name = "xingtu"
+compatibility_date = "2024-12-01"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "xingtu-db"
+database_id = "YOUR_D1_DATABASE_ID"
+
+[ai]
+binding = "AI"
+
+[vars]
+JWT_SECRET = "change-this-in-production"
+ADMIN_INIT_KEY = "xingtu-admin-2026"

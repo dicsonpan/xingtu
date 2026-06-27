@@ -1,0 +1,33 @@
+{
+  "name": "xingtu",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "星途 - 中考偏科生职教志愿填报助手",
+  "scripts": {
+    "dev": "vite",
+    "dev:full": "vite & sleep 3 && wrangler pages dev . --d1 DB",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler pages deploy dist",
+    "db:init": "wrangler d1 execute DB --local --file=schema.sql",
+    "db:init:remote": "wrangler d1 execute DB --file=schema.sql",
+    "db:seed": "wrangler d1 execute DB --local --file=seed.sql"
+  },
+  "dependencies": {
+    "hono": "^4.6.14",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.5.36",
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "wrangler": "^3.91.0"
+  }
+}

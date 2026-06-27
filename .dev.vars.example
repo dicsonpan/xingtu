@@ -1,0 +1,3 @@
+# 复制此文件为 .dev.vars 并填入实际值
+JWT_SECRET=your-secret-key-here
+ADMIN_INIT_KEY=your-admin-init-key-here
