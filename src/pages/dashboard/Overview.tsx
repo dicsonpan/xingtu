@@ -87,7 +87,7 @@ export function Overview() {
           欢迎回来{user ? `，${user.username}` : ''}
         </h1>
         <p style={{ color: 'var(--muted)', marginTop: 6 }}>
-          星途助你发现天赋、匹配专业、选对学校、远离陷阱。
+          知遇助你发现天赋、匹配专业、选对学校、远离陷阱。
         </p>
       </div>
 

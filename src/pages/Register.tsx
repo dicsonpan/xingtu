@@ -94,7 +94,7 @@ export function Register() {
           <>
             <h2>注册成功</h2>
             <div className="alert alert-success">
-              注册成功，等待管理员审核。审核通过后即可登录使用星途的全部功能。
+              注册成功，等待管理员审核。审核通过后即可登录使用知遇的全部功能。
             </div>
             <Link to="/login" className="btn btn-primary btn-block">
               前往登录
@@ -102,7 +102,7 @@ export function Register() {
           </>
         ) : (
           <>
-            <h2>注册星途</h2>
+            <h2>注册知遇</h2>
             <p className="subtitle">填写信息，开启你的科学升学之旅</p>
 
             {error && <div className="alert alert-danger">{error}</div>}
@@ -177,7 +177,7 @@ export function Register() {
                   className="form-textarea"
                   value={applicationReason}
                   onChange={(e) => setApplicationReason(e.target.value)}
-                  placeholder="请简要说明您为什么需要使用星途，例如您是偏科生/家长/教育工作者等"
+                  placeholder="请简要说明您为什么需要使用知遇，例如您是偏科生/家长/教育工作者等"
                 />
                 <div className="form-hint">至少 10 个字符</div>
                 {errors.application_reason && (

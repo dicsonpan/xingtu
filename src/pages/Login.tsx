@@ -88,8 +88,8 @@ export function Login() {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <h2>登录星途</h2>
-        <p className="subtitle">欢迎回来，继续你的星途之旅</p>
+        <h2>登录知遇</h2>
+        <p className="subtitle">欢迎回来，继续你的知遇之旅</p>
 
         {error && <div className="alert alert-danger">{error}</div>}
 

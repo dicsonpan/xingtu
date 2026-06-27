@@ -6,9 +6,9 @@ export function Landing() {
       {/* Hero 区域 */}
       <section className="hero">
         <div className="hero-content">
-          <h1>星途</h1>
+          <h1>知遇</h1>
           <p>
-            为中考后20%的偏科生提供<strong>天赋发掘、专业匹配、学校推荐、防骗预警</strong>全流程服务
+            知遇之恩，始于识才。为中考后20%的偏科生提供<strong>天赋发掘、专业匹配、学校推荐、防骗预警</strong>全流程服务
           </p>
           <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link to="/register" className="btn btn-primary btn-lg">立即注册</Link>
@@ -73,7 +73,7 @@ export function Landing() {
           <div className="section-label">解决方案</div>
           <h2>全流程闭环服务</h2>
           <p className="lead">
-            星途打通从<strong>认识自己</strong>到<strong>安全入学</strong>的每一个环节，
+            知遇打通从<strong>认识自己</strong>到<strong>安全入学</strong>的每一个环节，
             用 AI 帮偏科生把"随机选择"变成"科学决策"。
           </p>
           <div className="grid grid-4">
@@ -105,9 +105,9 @@ export function Landing() {
       <section className="section bg-alt">
         <div className="container">
           <div className="section-label">差异化优势</div>
-          <h2>为什么是星途</h2>
+          <h2>为什么是知遇</h2>
           <p className="lead">
-            市面上不缺升学工具，但没有一个真正站在<strong>偏科生</strong>这一侧。星途的不同，写在每一个维度里。
+            市面上不缺升学工具，但没有一个真正站在<strong>偏科生</strong>这一侧。知遇之"知"，是识才之知、懂你之知。
           </p>
           <div className="table-wrap">
             <table>
@@ -115,7 +115,7 @@ export function Landing() {
                 <tr>
                   <th>对比维度</th>
                   <th>现有工具</th>
-                  <th>星途</th>
+                  <th>知遇</th>
                 </tr>
               </thead>
               <tbody>
@@ -188,7 +188,7 @@ export function Landing() {
       <section className="section bg-alt">
         <div className="container" style={{ textAlign: 'center' }}>
           <div className="section-label">现在开始</div>
-          <h2>立即开始你的星途之旅</h2>
+          <h2>一次知遇，一生受益</h2>
           <p className="lead" style={{ maxWidth: 560, margin: '0 auto 32px' }}>
             注册账号，几分钟后即可完成天赋测评，开启属于你的科学升学之路。
           </p>

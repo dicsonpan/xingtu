@@ -15,7 +15,7 @@ const app = new Hono<AppContext>();
 app.use('*', cors());
 
 // 健康检查
-app.get('/api/health', (c) => c.json({ success: true, data: { status: 'ok', service: '星途 API' } }));
+app.get('/api/health', (c) => c.json({ success: true, data: { status: 'ok', service: '知遇 API' } }));
 
 // 路由挂载
 app.route('/api/auth', authRoutes);

@@ -1,4 +1,4 @@
-# 星途 — 中考偏科生职教志愿填报助手
+# 知遇 — 中考偏科生职教志愿填报助手
 
 > TRAE AI 创造力大赛 · 社会服务赛道作品
 
@@ -14,7 +14,7 @@
 ## 项目结构
 
 ```
-xingtu/
+zhiyu/
 ├── src/                          # React 前端
 │   ├── api/client.ts             # API 客户端
 │   ├── context/AuthContext.tsx   # 认证上下文

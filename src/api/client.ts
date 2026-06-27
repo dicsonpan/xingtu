@@ -1,6 +1,6 @@
 import type { ApiResponse } from '../../shared/types';
 
-const TOKEN_KEY = 'xingtu_token';
+const TOKEN_KEY = 'zhiyu_token';
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);

@@ -1,9 +1,9 @@
 {
-  "name": "xingtu",
+  "name": "zhiyu",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "星途 - 中考偏科生职教志愿填报助手",
+  "description": "知遇 - 中考偏科生职教志愿填报助手",
   "scripts": {
     "dev": "vite",
     "dev:full": "vite & sleep 3 && wrangler pages dev . --d1 DB",
