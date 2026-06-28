@@ -86,7 +86,13 @@ app.put('/', async (c) => {
   }
 
   fields.push("updated_at = datetime('now')");
-  fields.push("onboarding_step = MAX(onboarding_step, 1)");
+  // onboarding_step 列可能不存在（未执行迁移），单独处理
+  try {
+    await c.env.DB
+      .prepare("UPDATE user_profiles SET onboarding_step = MAX(onboarding_step, 1) WHERE user_id = ?")
+      .bind(userId)
+      .run();
+  } catch (e) { /* 忽略 */ }
   values.push(userId);
 
   await c.env.DB

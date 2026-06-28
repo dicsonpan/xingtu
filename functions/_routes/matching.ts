@@ -82,11 +82,13 @@ ${talentProfile ? `天赋画像：
     };
   }
 
-  // 更新新手指引进度
-  await c.env.DB
-    .prepare('UPDATE user_profiles SET onboarding_step = MAX(onboarding_step, 3), updated_at = datetime(\'now\') WHERE user_id = ? AND onboarding_step < 3')
-    .bind(userId)
-    .run();
+  // 更新新手指引进度（非关键操作，失败不影响结果）
+  try {
+    await c.env.DB
+      .prepare("UPDATE user_profiles SET onboarding_step = MAX(onboarding_step, 3), updated_at = datetime('now') WHERE user_id = ? AND onboarding_step < 3")
+      .bind(userId)
+      .run();
+  } catch (e) { /* onboarding_step 列可能不存在，忽略 */ }
 
   await logUsage(c.env.DB, userId, 'matching', tokensUsed, '专业智能匹配');
 

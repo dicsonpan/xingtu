@@ -29,10 +29,11 @@ app.route('/api/admin', adminRoutes);
 // 404
 app.notFound((c) => c.json({ success: false, error: '接口不存在' }, 404));
 
-// 全局错误处理
+// 全局错误处理 — 返回具体错误信息方便排查
 app.onError((err, c) => {
   console.error('Unhandled error:', err);
-  return c.json({ success: false, error: '服务器内部错误，请稍后重试' }, 500);
+  const msg = err instanceof Error ? err.message : String(err);
+  return c.json({ success: false, error: `服务器错误: ${msg}` }, 500);
 });
 
 export const onRequest: PagesFunction<Env> = async (context) => {
