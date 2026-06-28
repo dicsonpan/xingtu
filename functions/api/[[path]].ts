@@ -17,6 +17,39 @@ app.use('*', cors());
 // 健康检查
 app.get('/api/health', (c) => c.json({ success: true, data: { status: 'ok', service: '知遇 API' } }));
 
+// 诊断接口 — 检查 DB 和 AI 绑定是否正常
+app.get('/api/diagnose', async (c) => {
+  const result: Record<string, any> = {};
+
+  // 检查 DB 绑定
+  try {
+    if (!c.env.DB) {
+      result.db = { ok: false, error: 'DB 绑定不存在' };
+    } else {
+      const r = await c.env.DB.prepare('SELECT COUNT(*) as count FROM users').first<any>();
+      result.db = { ok: true, users: r?.count ?? '?' };
+    }
+  } catch (e: any) {
+    result.db = { ok: false, error: e?.message || String(e) };
+  }
+
+  // 检查 AI 绑定
+  try {
+    if (!c.env.AI) {
+      result.ai = { ok: false, error: 'AI 绑定不存在' };
+    } else {
+      result.ai = { ok: true, message: 'AI 绑定存在' };
+    }
+  } catch (e: any) {
+    result.ai = { ok: false, error: e?.message || String(e) };
+  }
+
+  // 检查 JWT_SECRET
+  result.jwt_secret = c.env.JWT_SECRET ? '已设置' : '未设置';
+
+  return c.json({ success: true, data: result });
+});
+
 // 路由挂载
 app.route('/api/auth', authRoutes);
 app.route('/api/profile', profileRoutes);
@@ -33,9 +66,20 @@ app.notFound((c) => c.json({ success: false, error: '接口不存在' }, 404));
 app.onError((err, c) => {
   console.error('Unhandled error:', err);
   const msg = err instanceof Error ? err.message : String(err);
-  return c.json({ success: false, error: `服务器错误: ${msg}` }, 500);
+  const stack = err instanceof Error ? err.stack : '';
+  return c.json({ success: false, error: `服务器错误: ${msg}`, stack: stack?.substring(0, 500) }, 500);
 });
 
 export const onRequest: PagesFunction<Env> = async (context) => {
-  return app.fetch(context.request, context.env, context as unknown as ExecutionContext);
+  try {
+    return await app.fetch(context.request, context.env, context as unknown as ExecutionContext);
+  } catch (err: any) {
+    // 如果 Hono 本身崩溃了，这里兜底
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : '';
+    return new Response(
+      JSON.stringify({ success: false, error: `Function 崩溃: ${msg}`, stack: stack?.substring(0, 500) }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
 };

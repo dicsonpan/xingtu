@@ -9,30 +9,36 @@ app.use('*', authMiddleware, requireApproved);
 
 // 专业智能匹配
 app.post('/', async (c) => {
-  const userId = c.get('userId')!;
+  try {
+    const userId = c.get('userId')!;
 
-  // 获取用户档案
-  const profile = await c.env.DB
-    .prepare('SELECT * FROM user_profiles WHERE user_id = ?')
-    .bind(userId)
-    .first<any>();
+    // 检查 AI 绑定是否存在
+    if (!c.env.AI) {
+      return c.json({ success: false, error: 'AI 服务未绑定，请联系管理员在 Cloudflare 后台添加 AI binding' }, 500);
+    }
 
-  if (!profile) {
-    return c.json({ success: false, error: '请先完善个人档案' }, 400);
-  }
+    // 获取用户档案
+    const profile = await c.env.DB
+      .prepare('SELECT * FROM user_profiles WHERE user_id = ?')
+      .bind(userId)
+      .first<any>();
 
-  // 获取最新测评结果
-  const assessment = await c.env.DB
-    .prepare('SELECT talent_profile FROM assessments WHERE user_id = ? ORDER BY created_at DESC LIMIT 1')
-    .bind(userId)
-    .first<any>();
+    if (!profile) {
+      return c.json({ success: false, error: '请先完善个人档案' }, 400);
+    }
 
-  const talentProfile = assessment ? parseJSON<any>(assessment.talent_profile, null) : null;
-  const interests = parseJSON(profile.interests, []);
-  const subjectScores = parseJSON(profile.subject_scores, {});
-  const preferredSchoolType = parseJSON(profile.preferred_school_type, []);
+    // 获取最新测评结果
+    const assessment = await c.env.DB
+      .prepare('SELECT talent_profile FROM assessments WHERE user_id = ? ORDER BY created_at DESC LIMIT 1')
+      .bind(userId)
+      .first<any>();
 
-  const systemPrompt = `你是一位资深的职业教育升学顾问，专门为中考偏科生推荐合适的专业方向。
+    const talentProfile = assessment ? parseJSON<any>(assessment.talent_profile, null) : null;
+    const interests = parseJSON(profile.interests, []);
+    const subjectScores = parseJSON(profile.subject_scores, {});
+    const preferredSchoolType = parseJSON(profile.preferred_school_type, []);
+
+    const systemPrompt = `你是一位资深的职业教育升学顾问，专门为中考偏科生推荐合适的专业方向。
 
 你的任务：根据学生的天赋画像、兴趣、中考成绩和个人情况，推荐 3-5 个最适合的职业教育专业（中专/中职/技校专业）。
 
@@ -55,7 +61,7 @@ app.post('/', async (c) => {
 - match_score 为 0-100 的整数
 - 请结合学生的实际天赋和兴趣来推荐，不要泛泛而谈`;
 
-  const userMessage = `学生信息：
+    const userMessage = `学生信息：
 - 地区：${profile.province || '未提供'} ${profile.city || ''}
 - 中考总分：${profile.exam_total_score || '未提供'}
 - 各科成绩：${JSON.stringify(subjectScores)}
@@ -71,31 +77,37 @@ ${talentProfile ? `天赋画像：
 
 请推荐最适合的专业方向。`;
 
-  const { response, tokensUsed } = await callAI(c.env.AI, c.env.DB, systemPrompt, userMessage, 1500);
+    const { response, tokensUsed } = await callAI(c.env.AI, c.env.DB, systemPrompt, userMessage, 1500);
 
-  let result = extractJSON<{ recommendations: any[]; summary: string }>(response);
+    let result = extractJSON<{ recommendations: any[]; summary: string }>(response);
 
-  if (!result) {
-    result = {
-      recommendations: [],
-      summary: response,
-    };
+    if (!result) {
+      result = {
+        recommendations: [],
+        summary: response,
+      };
+    }
+
+    // 更新新手指引进度（非关键操作，失败不影响结果）
+    try {
+      await c.env.DB
+        .prepare("UPDATE user_profiles SET onboarding_step = MAX(onboarding_step, 3), updated_at = datetime('now') WHERE user_id = ? AND onboarding_step < 3")
+        .bind(userId)
+        .run();
+    } catch (e) { /* onboarding_step 列可能不存在，忽略 */ }
+
+    try {
+      await logUsage(c.env.DB, userId, 'matching', tokensUsed, '专业智能匹配');
+    } catch (e) { /* 忽略日志记录失败 */ }
+
+    return c.json({
+      success: true,
+      data: { ...result, tokens_used: tokensUsed },
+    });
+  } catch (err: any) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ success: false, error: `匹配失败: ${msg}` }, 500);
   }
-
-  // 更新新手指引进度（非关键操作，失败不影响结果）
-  try {
-    await c.env.DB
-      .prepare("UPDATE user_profiles SET onboarding_step = MAX(onboarding_step, 3), updated_at = datetime('now') WHERE user_id = ? AND onboarding_step < 3")
-      .bind(userId)
-      .run();
-  } catch (e) { /* onboarding_step 列可能不存在，忽略 */ }
-
-  await logUsage(c.env.DB, userId, 'matching', tokensUsed, '专业智能匹配');
-
-  return c.json({
-    success: true,
-    data: { ...result, tokens_used: tokensUsed },
-  });
 });
 
 export default app;
