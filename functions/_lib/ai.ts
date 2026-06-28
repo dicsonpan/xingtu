@@ -28,8 +28,43 @@ async function getModel(db: D1Database): Promise<string> {
       .first<any>();
     return row?.model || DEFAULT_MODEL;
   } catch {
-    // 表不存在或其他数据库错误，返回默认模型
     return DEFAULT_MODEL;
+  }
+}
+
+/**
+ * 从 Workers AI 的返回结果中提取文本响应
+ * 不同模型可能返回不同的数据结构，这里做兼容处理
+ */
+function extractResponseText(result: any): string {
+  if (!result) return '';
+
+  // 情况1: { response: "文本" }
+  if (typeof result.response === 'string') return result.response;
+
+  // 情况2: { result: { response: "文本" } }
+  if (result.result && typeof result.result.response === 'string') return result.result.response;
+
+  // 情况3: { choices: [{ message: { content: "文本" } }] } (OpenAI 兼容格式)
+  if (result.choices && Array.isArray(result.choices) && result.choices.length > 0) {
+    const msg = result.choices[0].message?.content || result.choices[0].text;
+    if (typeof msg === 'string') return msg;
+  }
+
+  // 情况4: { result: "文本" }
+  if (typeof result.result === 'string') return result.result;
+
+  // 情况5: 直接返回字符串
+  if (typeof result === 'string') return result;
+
+  // 情况6: { data: "文本" } 或其他
+  if (typeof result.data === 'string') return result.data;
+
+  // 最后兜底：JSON 序列化，方便调试
+  try {
+    return JSON.stringify(result);
+  } catch {
+    return '';
   }
 }
 
@@ -62,8 +97,7 @@ export async function callAI(
       temperature: 0.7,
     } as any);
 
-    const response = result?.response || '';
-    // Workers AI 返回 usage 对象
+    const response = extractResponseText(result);
     const tokensUsed = result?.usage?.total_tokens
       || (result?.usage?.prompt_tokens || 0) + (result?.usage?.completion_tokens || 0)
       || 0;
@@ -71,8 +105,9 @@ export async function callAI(
     return { response, tokensUsed };
   } catch (err) {
     console.error('AI call failed:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
     return {
-      response: 'AI 服务暂时不可用，请稍后重试。',
+      response: `AI 调用失败: ${errMsg}`,
       tokensUsed: 0,
     };
   }
@@ -95,7 +130,7 @@ export async function testAIConnection(ai: Ai, db: D1Database): Promise<{ succes
       max_tokens: 20,
     } as any);
 
-    const reply = result?.response || '';
+    const reply = extractResponseText(result);
     return { success: true, reply, model };
   } catch (err: any) {
     return { success: false, reply: '', model, error: err?.message || String(err) };
@@ -106,6 +141,8 @@ export async function testAIConnection(ai: Ai, db: D1Database): Promise<{ succes
  * 尝试从 AI 响应中提取 JSON
  */
 export function extractJSON<T>(text: string): T | null {
+  if (typeof text !== 'string' || text.length === 0) return null;
+
   try {
     return JSON.parse(text) as T;
   } catch {
