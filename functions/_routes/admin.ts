@@ -210,4 +210,145 @@ app.get('/stats', async (c) => {
   });
 });
 
+// ============================================================
+// AI 配置管理
+// ============================================================
+
+// 获取 AI 配置（不返回完整 api_key，只返回掩码）
+app.get('/ai-config', async (c) => {
+  const row = await c.env.DB
+    .prepare('SELECT api_base_url, api_key, model, updated_at FROM system_settings WHERE id = 1')
+    .first<any>();
+
+  if (!row) {
+    return c.json({
+      success: true,
+      data: {
+        api_base_url: '',
+        api_key_masked: '',
+        model: '',
+        configured: false,
+        updated_at: null,
+      },
+    });
+  }
+
+  // 掩码处理：只显示前4位和后4位
+  const key = row.api_key || '';
+  let masked = '';
+  if (key.length > 8) {
+    masked = key.substring(0, 4) + '****' + key.substring(key.length - 4);
+  } else if (key.length > 0) {
+    masked = '****';
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      api_base_url: row.api_base_url || '',
+      api_key_masked: masked,
+      model: row.model || '',
+      configured: !!(row.api_base_url && row.api_key && row.model),
+      updated_at: row.updated_at,
+    },
+  });
+});
+
+// 更新 AI 配置
+app.put('/ai-config', async (c) => {
+  const body = await c.req.json();
+  const { api_base_url, api_key, model } = body;
+
+  if (!api_base_url || !model) {
+    return c.json({ success: false, error: '请填写 API 地址和模型名称' }, 400);
+  }
+
+  const adminId = c.get('userId')!;
+
+  // 如果 api_key 为空或为掩码格式，则不更新密钥
+  const isMasked = !api_key || api_key.includes('****');
+  let query: string;
+  let params: any[];
+
+  if (isMasked) {
+    // 只更新 URL 和 model，保留原有 key
+    query = `UPDATE system_settings SET api_base_url = ?, model = ?, updated_at = datetime('now'), updated_by = ? WHERE id = 1`;
+    params = [api_base_url.trim(), model.trim(), adminId];
+  } else {
+    query = `UPDATE system_settings SET api_base_url = ?, api_key = ?, model = ?, updated_at = datetime('now'), updated_by = ? WHERE id = 1`;
+    params = [api_base_url.trim(), api_key.trim(), model.trim(), adminId];
+  }
+
+  // 使用 INSERT OR REPLACE 确保行存在
+  await c.env.DB
+    .prepare(
+      `INSERT INTO system_settings (id, api_base_url, api_key, model, updated_at, updated_by)
+       VALUES (1, ?, ?, ?, datetime('now'), ?)
+       ON CONFLICT(id) DO ${isMasked ? 'UPDATE SET api_base_url = excluded.api_base_url, model = excluded.model, updated_at = datetime(\'now\'), updated_by = excluded.updated_by' : 'UPDATE SET api_base_url = excluded.api_base_url, api_key = excluded.api_key, model = excluded.model, updated_at = datetime(\'now\'), updated_by = excluded.updated_by'}`
+    )
+    .bind(
+      api_base_url.trim(),
+      isMasked ? '' : api_key.trim(),
+      model.trim(),
+      adminId
+    )
+    .run();
+
+  // 如果只更新 URL 和 model，需要单独处理（因为上面的 INSERT 会用空 key 覆盖）
+  if (isMasked) {
+    await c.env.DB
+      .prepare(`UPDATE system_settings SET api_base_url = ?, model = ?, updated_at = datetime('now'), updated_by = ? WHERE id = 1`)
+      .bind(api_base_url.trim(), model.trim(), adminId)
+      .run();
+  }
+
+  return c.json({ success: true, data: { message: 'AI 配置已更新' } });
+});
+
+// 测试 AI 配置（发送一个简单请求验证连通性）
+app.post('/ai-config/test', async (c) => {
+  const row = await c.env.DB
+    .prepare('SELECT api_base_url, api_key, model FROM system_settings WHERE id = 1')
+    .first<any>();
+
+  if (!row || !row.api_key || !row.api_base_url || !row.model) {
+    return c.json({ success: false, error: 'AI 配置不完整，请先填写所有字段' }, 400);
+  }
+
+  try {
+    const url = `${row.api_base_url.replace(/\/$/, '')}/chat/completions`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${row.api_key}`,
+      },
+      body: JSON.stringify({
+        model: row.model,
+        messages: [{ role: 'user', content: '请回复"连接成功"四个字' }],
+        max_tokens: 20,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return c.json({ success: false, error: `API 返回错误 ${res.status}: ${errText.substring(0, 200)}` }, 400);
+    }
+
+    const data: any = await res.json();
+    const reply = data.choices?.[0]?.message?.content || '';
+
+    return c.json({
+      success: true,
+      data: {
+        message: '连接测试成功',
+        reply,
+        model: row.model,
+      },
+    });
+  } catch (err: any) {
+    return c.json({ success: false, error: `连接失败: ${err.message || String(err)}` }, 500);
+  }
+});
+
 export default app;

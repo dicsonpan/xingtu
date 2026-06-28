@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   family_income_level TEXT DEFAULT 'medium' CHECK(family_income_level IN ('low','medium','high')),
   preferred_region TEXT,
   preferred_school_type TEXT, -- 中专/中职/技校，可多选 JSON
+  -- 新手指引进度
+  onboarding_step INTEGER DEFAULT 0,  -- 0=未开始, 1=已填档案, 2=已测评, 3=已匹配, 4=已完成全部
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -65,7 +67,7 @@ CREATE TABLE IF NOT EXISTS usage_logs (
 CREATE TABLE IF NOT EXISTS assessments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  answers TEXT NOT NULL,       -- JSON: 测评回答
+  answers TEXT NOT NULL,       -- JSON: 测评回答（情景选择+语音描述）
   talent_profile TEXT,         -- JSON: AI分析的天赋画像
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -88,6 +90,18 @@ CREATE TABLE IF NOT EXISTS fraud_checks (
   risk_level TEXT,             -- safe / warning / danger
   result TEXT NOT NULL,        -- JSON: AI分析结果
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 系统设置表（AI配置等）
+CREATE TABLE IF NOT EXISTS system_settings (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  -- AI 接口配置 (OpenAI 兼容格式)
+  api_base_url TEXT,    -- 如 https://api.openai.com/v1
+  api_key TEXT,         -- API 密钥
+  model TEXT,           -- 如 gpt-4o-mini
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_by INTEGER REFERENCES users(id),
+  CHECK (id = 1)
 );
 
 -- 索引

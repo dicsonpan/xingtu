@@ -62,7 +62,7 @@ app.post('/recommend', async (c) => {
 
 请推荐适合的学校类型并对比分析。`;
 
-  const { response, tokensUsed } = await callAI(c.env.AI, systemPrompt, userMessage, 1500);
+  const { response, tokensUsed } = await callAI(c.env.DB, systemPrompt, userMessage, 1500);
 
   let result = extractJSON<{ schools: any[]; comparison_advice: string; application_tips: string[] }>(response);
 

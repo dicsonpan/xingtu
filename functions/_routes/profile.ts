@@ -86,6 +86,7 @@ app.put('/', async (c) => {
   }
 
   fields.push("updated_at = datetime('now')");
+  fields.push("onboarding_step = MAX(onboarding_step, 1)");
   values.push(userId);
 
   await c.env.DB

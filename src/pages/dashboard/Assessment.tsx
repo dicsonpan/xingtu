@@ -1,23 +1,92 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { assessmentApi } from '../../api/client';
 import type { TalentProfile } from '../../../shared/types';
 
-interface DimensionDef {
-  key: string;
-  label: string;
-  desc: string;
+declare global {
+  interface Window {
+    webkitSpeechRecognition?: any;
+    SpeechRecognition?: any;
+  }
 }
 
-const DIMENSIONS: DimensionDef[] = [
-  { key: 'hands_on_ability', label: '动手能力', desc: '喜欢拆装东西、做手工、修理物品' },
-  { key: 'spatial_thinking', label: '空间想象力', desc: '能在脑海中想象立体形状、看图纸' },
-  { key: 'interpersonal_skill', label: '人际交往', desc: '善于与人沟通、组织活动、调解矛盾' },
-  { key: 'art_perception', label: '艺术感知', desc: '对色彩、音乐、美感有敏锐感受' },
-  { key: 'logical_thinking', label: '逻辑思维', desc: '善于分析问题、找规律、推理' },
-  { key: 'language_expression', label: '语言表达', desc: '善于表达观点、讲故事、写文章' },
-  { key: 'memory_ability', label: '记忆能力', desc: '记得快、记得牢、过目不忘' },
-  { key: 'observation_ability', label: '观察力', desc: '善于发现细节、注意到别人忽略的' },
+// ============================================================
+// 情景题定义
+// ============================================================
+interface ScenarioOption {
+  value: string;
+  label: string;
+}
+
+interface ScenarioQuestion {
+  question: string;
+  options: ScenarioOption[];
+}
+
+const SCENARIO_QUESTIONS: ScenarioQuestion[] = [
+  {
+    question: '课余时间，你最喜欢做什么？',
+    options: [
+      { value: 'hands_on', label: '拆装、修理东西，或者做手工' },
+      { value: 'art', label: '画画、设计，或者听音乐' },
+      { value: 'social', label: '和朋友一起玩、组织活动' },
+      { value: 'logic', label: '玩策略游戏、解谜题' },
+    ],
+  },
+  {
+    question: '做事的时候，你最享受哪种感觉？',
+    options: [
+      { value: 'hands_on', label: '手上有活儿，做出实在的东西' },
+      { value: 'spatial', label: '脑海里浮现出画面和形状' },
+      { value: 'social', label: '和人打交道，聊到一块儿' },
+      { value: 'logic', label: '找到规律，想明白一件事' },
+    ],
+  },
+  {
+    question: '朋友最常夸你什么？',
+    options: [
+      { value: 'hands_on', label: '手巧，什么东西都会修' },
+      { value: 'art', label: '有创意，审美不错' },
+      { value: 'social', label: '会来事，人缘好' },
+      { value: 'memory', label: '记性好，过目不忘' },
+    ],
+  },
+  {
+    question: '遇到一个难题，你的第一反应是？',
+    options: [
+      { value: 'hands_on', label: '先动手试试看' },
+      { value: 'spatial', label: '在脑子里画个图想想' },
+      { value: 'social', label: '找人讨论一下' },
+      { value: 'logic', label: '一步步推理分析' },
+    ],
+  },
+  {
+    question: '如果让你学一门手艺，你最想学？',
+    options: [
+      { value: 'hands_on', label: '机械修理、汽车维修' },
+      { value: 'art', label: '设计、美工、摄影' },
+      { value: 'social', label: '销售、管理、培训' },
+      { value: 'logic', label: '编程、电子技术' },
+    ],
+  },
+  {
+    question: '你觉得自己最接近哪种人？',
+    options: [
+      { value: 'hands_on', label: '实干家——动手能力强' },
+      { value: 'art', label: '艺术家——感知力敏锐' },
+      { value: 'social', label: '交际者——善于沟通' },
+      { value: 'observation', label: '观察者——善于发现细节' },
+    ],
+  },
 ];
+
+// ============================================================
+// 类型定义
+// ============================================================
+interface ScenarioAnswer {
+  questionIndex: number;
+  selected: string;
+  selectedLabel: string;
+}
 
 interface AnalysisResult {
   assessment_id: number;
@@ -26,10 +95,17 @@ interface AnalysisResult {
 }
 
 interface HistoryAssessment {
+  answers: any;
   talent_profile: TalentProfile | null;
   created_at: string;
 }
 
+const TOTAL_STEPS = 3;
+const STEP_LABELS = ['情景选择', '自由描述', 'AI 分析'];
+
+// ============================================================
+// 工具函数
+// ============================================================
 function formatDate(iso: string): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -38,13 +114,16 @@ function formatDate(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// ============================================================
+// 天赋画像展示组件
+// ============================================================
 function ProfileView({ profile }: { profile: TalentProfile }) {
   return (
     <>
       {profile.summary && (
         <div
           style={{
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: 800,
             color: 'var(--accent2)',
             lineHeight: 1.5,
@@ -57,10 +136,14 @@ function ProfileView({ profile }: { profile: TalentProfile }) {
 
       {profile.strengths && profile.strengths.length > 0 && (
         <div className="result-block">
-          <h4>优势天赋</h4>
+          <h4>你的优势</h4>
           <div className="tag-group">
             {profile.strengths.map((s, i) => (
-              <span className="tag active" key={i}>
+              <span
+                className="tag"
+                key={i}
+                style={{ background: 'var(--success-light)', color: 'var(--success)', borderColor: 'transparent', cursor: 'default' }}
+              >
                 {s}
               </span>
             ))}
@@ -70,10 +153,14 @@ function ProfileView({ profile }: { profile: TalentProfile }) {
 
       {profile.weaknesses && profile.weaknesses.length > 0 && (
         <div className="result-block">
-          <h4>待提升方面</h4>
+          <h4>需要注意</h4>
           <div className="tag-group">
             {profile.weaknesses.map((w, i) => (
-              <span className="tag" key={i}>
+              <span
+                className="tag"
+                key={i}
+                style={{ background: 'var(--warning-light)', color: 'var(--warning)', borderColor: 'transparent', cursor: 'default' }}
+              >
                 {w}
               </span>
             ))}
@@ -86,7 +173,11 @@ function ProfileView({ profile }: { profile: TalentProfile }) {
           <h4>推荐发展方向</h4>
           <div className="tag-group">
             {profile.recommended_directions.map((r, i) => (
-              <span className="tag active" key={i}>
+              <span
+                className="tag"
+                key={i}
+                style={{ background: 'var(--accent-light)', color: 'var(--accent)', borderColor: 'transparent', cursor: 'default' }}
+              >
                 {r}
               </span>
             ))}
@@ -97,7 +188,7 @@ function ProfileView({ profile }: { profile: TalentProfile }) {
       {profile.detailed_analysis && (
         <div className="result-block">
           <h4>详细分析</h4>
-          <p style={{ color: 'var(--ink)', lineHeight: 1.85, whiteSpace: 'pre-wrap' }}>
+          <p style={{ color: 'var(--ink)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
             {profile.detailed_analysis}
           </p>
         </div>
@@ -106,41 +197,131 @@ function ProfileView({ profile }: { profile: TalentProfile }) {
   );
 }
 
+// ============================================================
+// 主组件
+// ============================================================
 export function Assessment() {
-  const [dimensions, setDimensions] = useState<Record<string, number>>(() =>
-    Object.fromEntries(DIMENSIONS.map((d) => [d.key, 3]))
-  );
+  const [step, setStep] = useState(1);
+  const [answers, setAnswers] = useState<Record<number, ScenarioAnswer>>({});
+  const [voiceText, setVoiceText] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState('');
-  const [hasHistory, setHasHistory] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
   const [history, setHistory] = useState<HistoryAssessment | null>(null);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
+  // 语音识别相关状态
+  const [isListening, setIsListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(true);
+  const recognitionRef = useRef<any>(null);
+
+  // 页面加载：检查历史测评 & 语音识别支持
   useEffect(() => {
     assessmentApi
       .latest()
       .then((res) => {
-        if (res?.assessment) setHasHistory(true);
+        if (res?.assessment) setHistory(res.assessment);
       })
       .catch(() => {
         // 暂无测评记录
       });
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setVoiceSupported(false);
+    }
   }, []);
 
-  const handleSlider = (key: string, value: number) => {
-    setDimensions((prev) => ({ ...prev, [key]: value }));
+  // 是否所有情景题都已作答
+  const allAnswered = SCENARIO_QUESTIONS.every((_, i) => answers[i]);
+
+  const handleSelectOption = (questionIndex: number, value: string, label: string) => {
+    setAnswers((prev) => ({
+      ...prev,
+      [questionIndex]: { questionIndex, selected: value, selectedLabel: label },
+    }));
   };
 
-  const handleSubmit = async () => {
+  // ============================================================
+  // 语音识别
+  // ============================================================
+  const startListening = () => {
+    if (!voiceSupported) return;
+    // 已在录音中则不重复启动
+    if (recognitionRef.current) return;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'zh-CN';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onresult = (event: any) => {
+        let finalText = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            finalText += event.results[i][0].transcript;
+          }
+        }
+        if (finalText) {
+          setVoiceText((prev) => prev + finalText);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('语音识别错误:', event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+      setIsListening(true);
+    } catch (e) {
+      console.error('启动语音识别失败:', e);
+      setIsListening(false);
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        // ignore
+      }
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+  };
+
+  // ============================================================
+  // 提交 AI 分析
+  // ============================================================
+  const handleAnalyze = async () => {
     setLoading(true);
     setError('');
     setResult(null);
     try {
-      const res = await assessmentApi.submit({ dimensions });
+      const scenarioAnswers = SCENARIO_QUESTIONS.map((_, i) => answers[i]);
+      const res = await assessmentApi.submit({
+        scenario_answers: scenarioAnswers,
+        voice_description: voiceText,
+      });
       setResult(res);
-      setHasHistory(true);
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      // 更新历史记录为最新结果
+      setHistory({
+        answers: scenarioAnswers,
+        talent_profile: res.talent_profile,
+        created_at: new Date().toISOString(),
+      });
+      setHistoryExpanded(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : '提交失败，请稍后重试');
     } finally {
@@ -148,90 +329,217 @@ export function Assessment() {
     }
   };
 
-  const handleViewHistory = async () => {
-    setHistoryLoading(true);
+  const handleReset = () => {
+    setStep(1);
+    setAnswers({});
+    setVoiceText('');
+    setResult(null);
     setError('');
-    try {
-      const res = await assessmentApi.latest();
-      setHistory(res.assessment);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '获取历史记录失败');
-    } finally {
-      setHistoryLoading(false);
+  };
+
+  const handleViewHistory = () => {
+    if (!history) {
+      setHistoryLoading(true);
+      assessmentApi
+        .latest()
+        .then((res) => {
+          if (res?.assessment) {
+            setHistory(res.assessment);
+            setHistoryExpanded(true);
+          }
+        })
+        .catch((e) => {
+          setError(e instanceof Error ? e.message : '获取历史记录失败');
+        })
+        .finally(() => setHistoryLoading(false));
+    } else {
+      setHistoryExpanded((v) => !v);
     }
   };
 
-  const handleReset = () => {
-    setResult(null);
-    setDimensions(Object.fromEntries(DIMENSIONS.map((d) => [d.key, 3])));
+  const canNext = step === 1 ? allAnswered : true;
+
+  const handleNext = () => {
+    if (!canNext) return;
+    setError('');
+    setStep((s) => Math.min(s + 1, TOTAL_STEPS));
   };
 
-  return (
+  const handlePrev = () => {
+    setError('');
+    setStep((s) => Math.max(s - 1, 1));
+  };
+
+  // ============================================================
+  // 进度指示器
+  // ============================================================
+  const renderProgress = () => (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 0 }}>
+        {STEP_LABELS.map((label, i) => {
+          const stepNum = i + 1;
+          const isCurrent = step === stepNum;
+          const isCompleted = step > stepNum;
+          return (
+            <div
+              key={i}
+              style={{ display: 'flex', alignItems: 'flex-start', flex: i === STEP_LABELS.length - 1 ? '0 0 auto' : '1 1 auto' }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 72 }}>
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    background: isCurrent || isCompleted ? 'var(--accent)' : '#fff',
+                    color: isCurrent || isCompleted ? '#fff' : 'var(--muted)',
+                    border: isCurrent || isCompleted ? '2px solid var(--accent)' : '2px solid var(--rule)',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {isCompleted ? '✓' : stepNum}
+                </div>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: isCurrent ? 'var(--accent)' : isCompleted ? 'var(--ink)' : 'var(--muted)',
+                    fontWeight: isCurrent ? 700 : 500,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {label}
+                </span>
+              </div>
+              {i < STEP_LABELS.length - 1 && (
+                <div
+                  style={{
+                    flex: 1,
+                    height: 2,
+                    background: isCompleted ? 'var(--accent)' : 'var(--rule)',
+                    margin: '0 8px',
+                    marginTop: 16,
+                    transition: 'background 0.2s',
+                    minWidth: 20,
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginTop: 10 }}>
+        第 {step} 步 / 共 {TOTAL_STEPS} 步
+      </div>
+    </div>
+  );
+
+  // ============================================================
+  // 第 1 步：情景选择
+  // ============================================================
+  const renderStep1 = () => (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>天赋发掘测评</h2>
-        <p style={{ color: 'var(--muted)', fontSize: 14 }}>
-          偏科不等于没天赋。请根据真实情况为以下 8 个天赋维度打分（1-5 分），AI 将为您生成专属天赋画像。
-        </p>
-      </div>
-
-      {error && <div className="alert alert-danger">{error}</div>}
-
-      {hasHistory && !history && !historyLoading && !result && (
-        <div
-          className="alert alert-info"
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}
-        >
-          <span>您之前已完成过天赋测评，可以查看上次的分析结果。</span>
-          <button className="btn btn-secondary btn-sm" onClick={handleViewHistory}>
-            查看上次测评结果
-          </button>
-        </div>
-      )}
-
-      {/* 测评问卷 */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <h3 className="card-title">天赋维度自评</h3>
-        {DIMENSIONS.map((d) => (
-          <div className="form-group" key={d.key}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <label className="form-label" style={{ marginBottom: 0 }}>
-                {d.label}
-              </label>
-              <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{dimensions[d.key]}/5</span>
-            </div>
-            <div className="form-hint" style={{ marginBottom: 8 }}>
-              {d.desc}
-            </div>
-            <input
-              type="range"
-              min={1}
-              max={5}
-              step={1}
-              value={dimensions[d.key]}
-              onChange={(e) => handleSlider(d.key, Number(e.target.value))}
-              style={{ width: '100%' }}
-            />
+      <h3 className="card-title">情景选择</h3>
+      <p className="form-hint" style={{ marginBottom: 20 }}>
+        下面有 6 个小问题，没有标准答案，凭第一直觉选最像你的那个就好。全部选完才能进入下一步。
+      </p>
+      {SCENARIO_QUESTIONS.map((q, qi) => (
+        <div className="form-group" key={qi}>
+          <label className="form-label">
+            {qi + 1}. {q.question}
+          </label>
+          <div className="tag-group" style={{ marginTop: 8 }}>
+            {q.options.map((opt) => {
+              const selected = answers[qi]?.selected === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`tag ${selected ? 'active' : ''}`}
+                  onClick={() => handleSelectOption(qi, opt.value, opt.label)}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
-        ))}
-        <button className="btn btn-primary btn-lg btn-block" onClick={handleSubmit} disabled={loading}>
-          {loading ? '分析中...' : '开始 AI 分析'}
-        </button>
-      </div>
+        </div>
+      ))}
+    </div>
+  );
 
-      {/* 加载中 */}
-      {loading && (
-        <div className="card" style={{ marginBottom: 24 }}>
+  // ============================================================
+  // 第 2 步：自由描述（支持语音输入）
+  // ============================================================
+  const renderStep2 = () => (
+    <div>
+      <h3 className="card-title">用你自己的话说说</h3>
+      <p className="form-hint" style={{ marginBottom: 16 }}>
+        描述一下你擅长什么、喜欢什么。比如："我数学不好但特别喜欢画画，从小就喜欢给同学画肖像"。说得越具体，AI
+        分析越准。
+      </p>
+      {!voiceSupported && <div className="alert alert-warning">当前浏览器不支持语音输入，请直接打字</div>}
+      <div className="form-group">
+        <textarea
+          className="form-textarea"
+          style={{ minHeight: 160 }}
+          placeholder="在这里写下你对自己的了解……（也可以按住下方按钮说话）"
+          value={voiceText}
+          onChange={(e) => setVoiceText(e.target.value)}
+        />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onMouseDown={startListening}
+          onMouseUp={stopListening}
+          onMouseLeave={stopListening}
+          onTouchStart={(e) => {
+            e.preventDefault();
+            startListening();
+          }}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            stopListening();
+          }}
+          disabled={!voiceSupported}
+          style={
+            isListening
+              ? { background: 'var(--danger)', color: '#fff', borderColor: 'var(--danger)' }
+              : {}
+          }
+        >
+          {isListening ? '正在说话...' : '按住说话'}
+        </button>
+        <span className="form-hint">按住按钮说话，松开后识别结果会自动追加到文本框</span>
+      </div>
+    </div>
+  );
+
+  // ============================================================
+  // 第 3 步：AI 分析结果
+  // ============================================================
+  const renderStep3 = () => {
+    if (loading) {
+      return (
+        <div>
+          <h3 className="card-title">AI 分析中</h3>
           <div className="loading">
             <div className="spinner" />
             AI 正在分析您的天赋...
           </div>
         </div>
-      )}
+      );
+    }
 
-      {/* AI 分析结果 */}
-      {result && result.talent_profile && (
-        <div className="card" style={{ marginBottom: 24 }}>
+    if (result && result.talent_profile) {
+      return (
+        <div>
           <h3 className="card-title">AI 天赋分析结果</h3>
           <ProfileView profile={result.talent_profile} />
           <div
@@ -250,28 +558,103 @@ export function Assessment() {
             </button>
           </div>
         </div>
-      )}
+      );
+    }
 
-      {/* 历史测评结果 */}
-      {historyLoading && (
-        <div className="card">
-          <div className="loading">
-            <div className="spinner" /> 加载历史记录...
+    // 等待用户点击开始分析
+    return (
+      <div>
+        <h3 className="card-title">AI 分析</h3>
+        <p className="form-hint" style={{ marginBottom: 20 }}>
+          准备好了吗？AI 将根据你的情景选择和文字描述，生成专属天赋画像。
+        </p>
+        <button className="btn btn-primary btn-lg btn-block" onClick={handleAnalyze}>
+          开始 AI 分析
+        </button>
+      </div>
+    );
+  };
+
+  // ============================================================
+  // 底部导航按钮
+  // ============================================================
+  const renderNav = () => {
+    // 分析中或结果展示时不显示步骤导航
+    if (step === 3 && (loading || result)) return null;
+
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: 24,
+          gap: 12,
+        }}
+      >
+        {step > 1 ? (
+          <button className="btn btn-secondary" onClick={handlePrev}>
+            上一步
+          </button>
+        ) : (
+          <span />
+        )}
+        {step < 3 && (
+          <button className="btn btn-primary" onClick={handleNext} disabled={!canNext}>
+            下一步
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  // ============================================================
+  // 页面渲染
+  // ============================================================
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>天赋发掘测评</h2>
+        <p style={{ color: 'var(--muted)', fontSize: 14 }}>
+          偏科不等于没天赋。花两分钟回答几个小问题，AI 帮你找到自己的优势方向。
+        </p>
+      </div>
+
+      {error && <div className="alert alert-danger">{error}</div>}
+
+      {/* 历史测评提示卡片 */}
+      {history && !result && !loading && (
+        <div className="alert alert-info" style={{ marginBottom: 16 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}
+          >
+            <span>您已完成过测评（{formatDate(history.created_at)}），可以查看上次的分析结果。</span>
+            <button className="btn btn-secondary btn-sm" onClick={handleViewHistory} disabled={historyLoading}>
+              {historyLoading ? '加载中...' : historyExpanded ? '收起' : '查看上次结果'}
+            </button>
           </div>
+          {historyExpanded && history.talent_profile && (
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--rule)' }}>
+              <ProfileView profile={history.talent_profile} />
+            </div>
+          )}
         </div>
       )}
 
-      {history && history.talent_profile && (
-        <div className="card">
-          <h3 className="card-title">
-            上次测评结果{' '}
-            <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--muted)' }}>
-              （{formatDate(history.created_at)}）
-            </span>
-          </h3>
-          <ProfileView profile={history.talent_profile} />
-        </div>
-      )}
+      {/* 多步骤测评卡片 */}
+      <div className="card">
+        {renderProgress()}
+        {step === 1 && renderStep1()}
+        {step === 2 && renderStep2()}
+        {step === 3 && renderStep3()}
+        {renderNav()}
+      </div>
     </div>
   );
 }

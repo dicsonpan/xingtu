@@ -1,8 +1,13 @@
 // ============================================================
-// AI 辅助函数 (Cloudflare Workers AI)
+// AI 辅助函数 (OpenAI 兼容 API)
+// 从 D1 system_settings 表读取配置，支持任意 OpenAI 兼容端点
 // ============================================================
 
-const AI_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+interface AIConfig {
+  api_base_url: string;
+  api_key: string;
+  model: string;
+}
 
 interface AIResponse {
   response: string;
@@ -10,35 +15,76 @@ interface AIResponse {
 }
 
 /**
- * 调用 Workers AI 并追踪 token 用量
+ * 从数据库读取 AI 配置
+ */
+async function getAIConfig(db: D1Database): Promise<AIConfig | null> {
+  const row = await db
+    .prepare('SELECT api_base_url, api_key, model FROM system_settings WHERE id = 1')
+    .first<any>();
+  if (!row || !row.api_key || !row.api_base_url || !row.model) {
+    return null;
+  }
+  return {
+    api_base_url: row.api_base_url.replace(/\/$/, ''),
+    api_key: row.api_key,
+    model: row.model,
+  };
+}
+
+/**
+ * 调用 OpenAI 兼容 API 并追踪真实 token 用量
  */
 export async function callAI(
-  ai: Ai,
+  db: D1Database,
   systemPrompt: string,
   userMessage: string,
   maxTokens: number = 1024
 ): Promise<AIResponse> {
+  const config = await getAIConfig(db);
+  if (!config) {
+    return {
+      response: 'AI 服务尚未配置，请联系管理员在后台设置 AI 接口参数。',
+      tokensUsed: 0,
+    };
+  }
+
   const messages = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userMessage },
   ];
 
   try {
-    const result = await ai.run(AI_MODEL as any, {
-      messages,
-      max_tokens: maxTokens,
-      temperature: 0.7,
-    } as any);
+    const url = `${config.api_base_url}/chat/completions`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.api_key}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages,
+        max_tokens: maxTokens,
+        temperature: 0.7,
+      }),
+    });
 
-    const response = (result as any).response || '';
-    // 估算 token 用量 (中文约 2 字符/token, 英文约 4 字符/token, 取中间值)
-    const inputTokens = Math.ceil(systemPrompt.length / 3 + userMessage.length / 3);
-    const outputTokens = Math.ceil(response.length / 3);
-    const tokensUsed = inputTokens + outputTokens;
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('AI API error:', res.status, errText);
+      return {
+        response: `AI 服务调用失败 (${res.status})，请稍后重试。`,
+        tokensUsed: 0,
+      };
+    }
+
+    const data: any = await res.json();
+    const response = data.choices?.[0]?.message?.content || '';
+    // 使用 API 返回的真实 token 用量
+    const tokensUsed = data.usage?.total_tokens || 0;
 
     return { response, tokensUsed };
   } catch (err) {
-    // AI 调用失败时返回错误信息，不阻断流程
     console.error('AI call failed:', err);
     return {
       response: 'AI 服务暂时不可用，请稍后重试。',

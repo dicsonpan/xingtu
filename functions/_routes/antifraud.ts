@@ -53,7 +53,7 @@ ${query}
 
 请分析并给出风险评估。`;
 
-  const { response, tokensUsed } = await callAI(c.env.AI, systemPrompt, userMessage, 1000);
+  const { response, tokensUsed } = await callAI(c.env.DB, systemPrompt, userMessage, 1000);
 
   let result = extractJSON<FraudCheckResult>(response);
 

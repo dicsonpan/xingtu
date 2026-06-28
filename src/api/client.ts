@@ -50,9 +50,14 @@ export const profileApi = {
   update: (body: any) => request('/profile', { method: 'PUT', body: JSON.stringify(body) }),
 };
 
-// Assessment API
+// Assessment API — 新流程：情景选择 + 语音/文字描述
 export const assessmentApi = {
-  submit: (body: { dimensions: Record<string, number>; subject_scores?: Record<string, number>; interests?: string[] }) =>
+  submit: (body: {
+    scenario_answers: { questionIndex: number; selected: string; selectedLabel?: string }[];
+    voice_description?: string;
+    subject_scores?: Record<string, number>;
+    interests?: string[];
+  }) =>
     request<{ assessment_id: number; talent_profile: any; tokens_used: number }>('/assessment', { method: 'POST', body: JSON.stringify(body) }),
   latest: () => request<{ assessment: any }>('/assessment/latest'),
   history: () => request<{ assessments: any[] }>('/assessment/history'),
@@ -85,4 +90,9 @@ export const adminApi = {
   ban: (id: number) => request(`/admin/users/${id}/ban`, { method: 'POST' }),
   unban: (id: number) => request(`/admin/users/${id}/unban`, { method: 'POST' }),
   stats: () => request<any>('/admin/stats'),
+  // AI 配置
+  getAIConfig: () => request<{ api_base_url: string; api_key_masked: string; model: string; configured: boolean; updated_at: string | null }>('/admin/ai-config'),
+  updateAIConfig: (body: { api_base_url: string; api_key: string; model: string }) =>
+    request('/admin/ai-config', { method: 'PUT', body: JSON.stringify(body) }),
+  testAIConfig: () => request<{ message: string; reply: string; model: string }>('/admin/ai-config/test', { method: 'POST' }),
 };

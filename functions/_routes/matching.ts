@@ -71,7 +71,7 @@ ${talentProfile ? `天赋画像：
 
 请推荐最适合的专业方向。`;
 
-  const { response, tokensUsed } = await callAI(c.env.AI, systemPrompt, userMessage, 1500);
+  const { response, tokensUsed } = await callAI(c.env.DB, systemPrompt, userMessage, 1500);
 
   let result = extractJSON<{ recommendations: any[]; summary: string }>(response);
 
@@ -81,6 +81,12 @@ ${talentProfile ? `天赋画像：
       summary: response,
     };
   }
+
+  // 更新新手指引进度
+  await c.env.DB
+    .prepare('UPDATE user_profiles SET onboarding_step = MAX(onboarding_step, 3), updated_at = datetime(\'now\') WHERE user_id = ? AND onboarding_step < 3')
+    .bind(userId)
+    .run();
 
   await logUsage(c.env.DB, userId, 'matching', tokensUsed, '专业智能匹配');
 

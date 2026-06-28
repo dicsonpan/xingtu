@@ -2,7 +2,6 @@
 
 export interface Env {
   DB: D1Database;
-  AI: Ai;
   JWT_SECRET: string;
   ADMIN_INIT_KEY: string;
 }

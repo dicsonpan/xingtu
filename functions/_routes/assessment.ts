@@ -9,51 +9,50 @@ const app = new Hono<AppContext>();
 app.use('*', authMiddleware, requireApproved);
 
 // 提交测评并获取AI天赋分析
+// 新流程：情景选择题 + 语音/文字自由描述 + AI综合分析
 app.post('/', async (c) => {
   const userId = c.get('userId')!;
   const body = await c.req.json();
 
-  const { dimensions, subject_scores, interests } = body;
+  const { scenario_answers, voice_description, subject_scores, interests } = body;
 
-  if (!dimensions || typeof dimensions !== 'object') {
-    return c.json({ success: false, error: '请完成天赋维度自评' }, 400);
+  // 至少要有情景选择或语音描述中的一种
+  if ((!scenario_answers || !Array.isArray(scenario_answers) || scenario_answers.length === 0) && !voice_description) {
+    return c.json({ success: false, error: '请至少完成情景选择题或语音描述' }, 400);
   }
 
   // 保存测评答案
-  const answers = JSON.stringify({ dimensions, subject_scores, interests });
+  const answers = JSON.stringify({ scenario_answers, voice_description, subject_scores, interests });
   const insertResult = await c.env.DB
     .prepare('INSERT INTO assessments (user_id, answers) VALUES (?, ?)')
     .bind(userId, answers)
     .run();
   const assessmentId = insertResult.meta.last_row_id;
 
-  // 构建 AI 分析请求
-  const dimNames: Record<string, string> = {
-    hands_on_ability: '动手能力',
-    spatial_thinking: '空间想象力',
-    interpersonal_skill: '人际交往',
-    art_perception: '艺术感知',
-    logical_thinking: '逻辑思维',
-    language_expression: '语言表达',
-    memory_ability: '记忆能力',
-    observation_ability: '观察力',
-  };
+  // 构建情景选择文本
+  let scenarioText = '未提供';
+  if (scenario_answers && Array.isArray(scenario_answers) && scenario_answers.length > 0) {
+    scenarioText = scenario_answers
+      .map((a: any) => `问题${a.questionIndex + 1}：选择了「${a.selectedLabel || a.selected}」`)
+      .join('\n');
+  }
 
-  const dimText = Object.entries(dimensions)
-    .map(([k, v]) => `${dimNames[k] || k}: ${v}/5`)
-    .join('\n');
+  // 语音/文字描述
+  const voiceText = voice_description ? voice_description.trim() : '未提供';
 
+  // 中考成绩
   const scoreText = subject_scores
     ? Object.entries(subject_scores).map(([k, v]) => `${k}: ${v}`).join('、')
     : '未提供';
 
+  // 兴趣
   const interestText = interests?.length ? interests.join('、') : '未提供';
 
   const systemPrompt = `你是一位专业的职业教育天赋评估专家，专门帮助中考偏科生发现被总分掩盖的天赋。
 
 你的核心理念：偏科 ≠ 笨。偏科往往意味着在特定领域有突出天赋。请从多元智能的角度分析，不要只看分数低就认为学生没有天赋。
 
-请根据学生的自评数据和中考成绩，生成一份详细的天赋画像。
+请根据学生的情景选择、自由描述、中考成绩和兴趣，生成一份详细的天赋画像。
 
 你必须以纯 JSON 格式返回结果（不要包含 markdown 代码块标记），格式如下：
 {
@@ -61,23 +60,27 @@ app.post('/', async (c) => {
   "strengths": ["优势1", "优势2", "优势3"],
   "weaknesses": ["需要注意的方面1", "方面2"],
   "recommended_directions": ["推荐发展方向1", "方向2", "方向3"],
-  "detailed_analysis": "200-400字的详细分析，要具体、有温度、有洞察力"
+  "detailed_analysis": "200-400字的详细分析，要具体、有温度、有洞察力，结合学生的实际回答来分析"
 }`;
 
-  const userMessage = `学生天赋自评数据：
-${dimText}
+  const userMessage = `学生测评数据：
 
-中考各科成绩：${scoreText}
-兴趣爱好：${interestText}
+【情景选择】
+${scenarioText}
 
-请分析这位学生的天赋画像。`;
+【自我描述】
+${voiceText}
 
-  const { response, tokensUsed } = await callAI(c.env.AI, systemPrompt, userMessage, 1200);
+【中考各科成绩】${scoreText}
+【兴趣爱好】${interestText}
+
+请综合以上信息，分析这位学生的天赋画像。重点发掘被分数掩盖的优势。`;
+
+  const { response, tokensUsed } = await callAI(c.env.DB, systemPrompt, userMessage, 1200);
 
   let talentProfile: TalentProfile | null = extractJSON<TalentProfile>(response);
 
   if (!talentProfile) {
-    // AI 返回非 JSON 格式时，构建一个基础画像
     talentProfile = {
       summary: '测评完成，以下是AI分析结果',
       strengths: ['请查看详细分析'],
@@ -91,6 +94,12 @@ ${dimText}
   await c.env.DB
     .prepare('UPDATE assessments SET talent_profile = ? WHERE id = ?')
     .bind(JSON.stringify(talentProfile), assessmentId)
+    .run();
+
+  // 更新新手指引进度
+  await c.env.DB
+    .prepare('UPDATE user_profiles SET onboarding_step = MAX(onboarding_step, 2), updated_at = datetime(\'now\') WHERE user_id = ? AND onboarding_step < 2')
+    .bind(userId)
     .run();
 
   // 记录使用量

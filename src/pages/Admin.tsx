@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminApi } from '../api/client';
 import type { User, UserStatus } from '../../shared/types';
 
-type Tab = 'users' | 'stats';
+type Tab = 'users' | 'stats' | 'ai';
 type StatusFilter = 'all' | UserStatus;
 
 interface FeatureStat {
@@ -32,6 +32,20 @@ interface UserDetailUsage {
   request_count: number;
   last_active: string | null;
   features: FeatureStat[];
+}
+
+interface AIConfig {
+  api_base_url: string;
+  api_key_masked: string;
+  model: string;
+  configured: boolean;
+  updated_at: string | null;
+}
+
+type AIMessageKind = 'success' | 'danger' | 'info' | 'warning';
+interface AIMessage {
+  kind: AIMessageKind;
+  text: string;
 }
 
 const STATUS_LABEL: Record<UserStatus, string> = {
@@ -86,6 +100,14 @@ export function Admin() {
   const [detail, setDetail] = useState<{ user: User; usage: UserDetailUsage } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // AI 配置相关状态
+  const [aiConfig, setAIConfig] = useState<AIConfig | null>(null);
+  const [aiConfigLoading, setAIConfigLoading] = useState(false);
+  const [aiForm, setAIForm] = useState({ api_base_url: '', api_key: '', model: '' });
+  const [savingAI, setSavingAI] = useState(false);
+  const [testingAI, setTestingAI] = useState(false);
+  const [aiMessage, setAIMessage] = useState<AIMessage | null>(null);
+
   const loadUsers = useCallback(async (status: StatusFilter) => {
     setUsersLoading(true);
     setError('');
@@ -111,6 +133,28 @@ export function Admin() {
     }
   }, []);
 
+  const loadAIConfig = useCallback(async () => {
+    setAIConfigLoading(true);
+    try {
+      const res = await adminApi.getAIConfig();
+      const cfg = res as AIConfig;
+      setAIConfig(cfg);
+      // 预填表单（密钥留空，由 placeholder 显示掩码值）
+      setAIForm({
+        api_base_url: cfg.api_base_url || '',
+        api_key: '',
+        model: cfg.model || '',
+      });
+    } catch (e) {
+      setAIMessage({
+        kind: 'danger',
+        text: e instanceof Error ? e.message : '加载 AI 配置失败',
+      });
+    } finally {
+      setAIConfigLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadUsers('all');
     loadStats();
@@ -124,6 +168,14 @@ export function Admin() {
   const refreshAll = () => {
     loadUsers(filter);
     loadStats();
+  };
+
+  const handleTabChange = (t: Tab) => {
+    setTab(t);
+    setError('');
+    if (t === 'ai' && !aiConfig && !aiConfigLoading) {
+      loadAIConfig();
+    }
   };
 
   const runAction = async (id: number, fn: () => Promise<unknown>) => {
@@ -168,6 +220,48 @@ export function Admin() {
     }
   };
 
+  const handleSaveAI = async () => {
+    setSavingAI(true);
+    setAIMessage(null);
+    try {
+      await adminApi.updateAIConfig({
+        api_base_url: aiForm.api_base_url.trim(),
+        api_key: aiForm.api_key,
+        model: aiForm.model.trim(),
+      });
+      setAIMessage({ kind: 'success', text: 'AI 配置已保存' });
+      // 刷新配置状态（同步 updated_at 与掩码密钥）
+      await loadAIConfig();
+    } catch (e) {
+      setAIMessage({
+        kind: 'danger',
+        text: e instanceof Error ? e.message : '保存 AI 配置失败',
+      });
+    } finally {
+      setSavingAI(false);
+    }
+  };
+
+  const handleTestAI = async () => {
+    setTestingAI(true);
+    setAIMessage(null);
+    try {
+      const res = await adminApi.testAIConfig();
+      const data = res as { message: string; reply: string; model: string };
+      setAIMessage({
+        kind: 'success',
+        text: `连接成功！AI回复: ${data.reply}`,
+      });
+    } catch (e) {
+      setAIMessage({
+        kind: 'danger',
+        text: e instanceof Error ? e.message : '测试连接失败',
+      });
+    } finally {
+      setTestingAI(false);
+    }
+  };
+
   const renderActions = (u: User) => {
     if (u.role === 'admin') {
       return <span style={{ color: 'var(--muted)', fontSize: 13 }}>管理员</span>;
@@ -208,21 +302,33 @@ export function Admin() {
     }
   };
 
+  const alertClass = (kind: AIMessageKind) =>
+    kind === 'success'
+      ? 'alert alert-success'
+      : kind === 'danger'
+      ? 'alert alert-danger'
+      : kind === 'warning'
+      ? 'alert alert-warning'
+      : 'alert alert-info';
+
   return (
     <div className="container" style={{ padding: 24 }}>
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>管理后台</h2>
-        <p style={{ color: 'var(--muted)', fontSize: 14 }}>用户审核与平台使用统计</p>
+        <p style={{ color: 'var(--muted)', fontSize: 14 }}>用户审核、平台统计与系统配置</p>
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}
 
       <div className="tabs">
-        <button className={`tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>
+        <button className={`tab ${tab === 'users' ? 'active' : ''}`} onClick={() => handleTabChange('users')}>
           用户审核
         </button>
-        <button className={`tab ${tab === 'stats' ? 'active' : ''}`} onClick={() => setTab('stats')}>
+        <button className={`tab ${tab === 'stats' ? 'active' : ''}`} onClick={() => handleTabChange('stats')}>
           使用统计
+        </button>
+        <button className={`tab ${tab === 'ai' ? 'active' : ''}`} onClick={() => handleTabChange('ai')}>
+          AI配置
         </button>
       </div>
 
@@ -383,6 +489,105 @@ export function Admin() {
               <div className="icon">📊</div>暂无统计数据
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'ai' && (
+        <div>
+          <div className="card">
+            <h3 className="card-title">AI 接口配置</h3>
+
+            <div className="alert alert-info" style={{ marginTop: 12 }}>
+              配置 OpenAI 兼容的 API 接口。支持 OpenAI、DeepSeek、通义千问等兼容 OpenAI 格式的服务。配置后所有 AI
+              功能（天赋测评、专业匹配、学校推荐、防骗检测）将使用此接口。
+            </div>
+
+            {aiConfig && !aiConfig.configured && (
+              <div className="alert alert-warning">AI 尚未配置，用户无法使用 AI 功能</div>
+            )}
+
+            {aiMessage && <div className={alertClass(aiMessage.kind)}>{aiMessage.text}</div>}
+
+            {aiConfigLoading ? (
+              <div className="loading">
+                <div className="spinner" /> 加载 AI 配置...
+              </div>
+            ) : (
+              <>
+                <div className="form-group">
+                  <label className="form-label">API 地址</label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    value={aiForm.api_base_url}
+                    placeholder="https://api.openai.com/v1"
+                    onChange={(e) => setAIForm({ ...aiForm, api_base_url: e.target.value })}
+                  />
+                  <div className="form-hint">
+                    OpenAI: https://api.openai.com/v1 | DeepSeek: https://api.deepseek.com/v1 |
+                    其他兼容服务请填对应的 /v1 结尾地址
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">API 密钥</label>
+                  <input
+                    className="form-input"
+                    type="password"
+                    value={aiForm.api_key}
+                    placeholder={aiConfig?.api_key_masked || '请输入 API 密钥'}
+                    onChange={(e) => setAIForm({ ...aiForm, api_key: e.target.value })}
+                  />
+                  <div className="form-hint">如仅需修改地址或模型而不换密钥，此处留空即可保持原有密钥不变</div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">模型名称</label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    value={aiForm.model}
+                    placeholder="gpt-4o-mini"
+                    onChange={(e) => setAIForm({ ...aiForm, model: e.target.value })}
+                  />
+                  <div className="form-hint">常用模型: gpt-4o-mini / gpt-4o / deepseek-chat / qwen-plus 等</div>
+                </div>
+
+                {aiConfig?.updated_at && (
+                  <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
+                    上次更新时间: {formatDate(aiConfig.updated_at)}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-primary"
+                    disabled={savingAI || testingAI}
+                    onClick={handleSaveAI}
+                  >
+                    {savingAI ? '保存中...' : '保存配置'}
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={savingAI || testingAI}
+                    onClick={handleTestAI}
+                  >
+                    {testingAI ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span className="spinner" /> 测试中...
+                      </span>
+                    ) : (
+                      '测试连接'
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="alert alert-info" style={{ marginTop: 16, fontSize: 13 }}>
+            提示: 每次AI调用都会消耗token。可在"使用统计"tab中查看各用户token消耗明细。
+          </div>
         </div>
       )}
 
