@@ -9,10 +9,8 @@ const DEFAULT_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
 // 可选模型列表（供管理后台展示）
 export const AVAILABLE_MODELS = [
   { value: '@cf/qwen/qwen3-30b-a3b-fp8', label: 'Qwen3 30B (通义千问3) — 推荐，中文最佳，性价比高' },
-  { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'Llama 3.3 70B — 能力强，消耗较大' },
-  { value: '@cf/meta/llama-3.1-8b-instruct-fp8-fast', label: 'Llama 3.1 8B — 轻量快速，消耗低' },
-  { value: '@cf/openai/gpt-oss-20b', label: 'GPT-OSS 20B (OpenAI开源) — 均衡之选' },
-  { value: '@cf/zai-org/glm-4.7-flash', label: 'GLM-4.7-Flash (智谱) — 中文优秀，超长上下文' },
+  { value: '@cf/openai/gpt-oss-120b', label: 'GPT-OSS 120B (OpenAI开源) — 能力最强' },
+  { value: '@cf/zai-org/glm-5.2', label: 'GLM-5.2 (智谱) — 中文优秀，综合能力强' },
 ];
 
 interface AIResponse {
@@ -21,13 +19,18 @@ interface AIResponse {
 }
 
 /**
- * 从数据库读取配置的模型
+ * 从数据库读取配置的模型，失败时返回默认模型
  */
 async function getModel(db: D1Database): Promise<string> {
-  const row = await db
-    .prepare('SELECT model FROM system_settings WHERE id = 1')
-    .first<any>();
-  return row?.model || DEFAULT_MODEL;
+  try {
+    const row = await db
+      .prepare('SELECT model FROM system_settings WHERE id = 1')
+      .first<any>();
+    return row?.model || DEFAULT_MODEL;
+  } catch {
+    // 表不存在或其他数据库错误，返回默认模型
+    return DEFAULT_MODEL;
+  }
 }
 
 /**
@@ -40,7 +43,13 @@ export async function callAI(
   userMessage: string,
   maxTokens: number = 1024
 ): Promise<AIResponse> {
-  const model = await getModel(db);
+  let model: string;
+  try {
+    model = await getModel(db);
+  } catch {
+    model = DEFAULT_MODEL;
+  }
+
   const messages = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userMessage },
@@ -54,7 +63,7 @@ export async function callAI(
     } as any);
 
     const response = result?.response || '';
-    // Workers AI 返回 usage 对象，包含 prompt_tokens 和 completion_tokens
+    // Workers AI 返回 usage 对象
     const tokensUsed = result?.usage?.total_tokens
       || (result?.usage?.prompt_tokens || 0) + (result?.usage?.completion_tokens || 0)
       || 0;
@@ -73,7 +82,13 @@ export async function callAI(
  * 测试 Workers AI 连接（供管理后台使用）
  */
 export async function testAIConnection(ai: Ai, db: D1Database): Promise<{ success: boolean; reply: string; model: string; error?: string }> {
-  const model = await getModel(db);
+  let model: string;
+  try {
+    model = await getModel(db);
+  } catch {
+    model = DEFAULT_MODEL;
+  }
+
   try {
     const result: any = await ai.run(model as any, {
       messages: [{ role: 'user', content: '请回复"连接成功"四个字' }],
