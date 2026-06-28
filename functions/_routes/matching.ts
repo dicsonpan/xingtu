@@ -71,7 +71,7 @@ ${talentProfile ? `天赋画像：
 
 请推荐最适合的专业方向。`;
 
-  const { response, tokensUsed } = await callAI(c.env.DB, systemPrompt, userMessage, 1500);
+  const { response, tokensUsed } = await callAI(c.env.AI, c.env.DB, systemPrompt, userMessage, 1500);
 
   let result = extractJSON<{ recommendations: any[]; summary: string }>(response);
 

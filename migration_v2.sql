@@ -3,11 +3,9 @@
 -- 在 Cloudflare D1 Console 中执行此文件
 -- ============================================================
 
--- 1. 新增系统设置表（AI配置）
+-- 1. 新增系统设置表（AI模型配置）
 CREATE TABLE IF NOT EXISTS system_settings (
   id INTEGER PRIMARY KEY DEFAULT 1,
-  api_base_url TEXT,
-  api_key TEXT,
   model TEXT,
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_by INTEGER REFERENCES users(id),

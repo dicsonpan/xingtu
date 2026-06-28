@@ -76,7 +76,7 @@ ${voiceText}
 
 请综合以上信息，分析这位学生的天赋画像。重点发掘被分数掩盖的优势。`;
 
-  const { response, tokensUsed } = await callAI(c.env.DB, systemPrompt, userMessage, 1200);
+  const { response, tokensUsed } = await callAI(c.env.AI, c.env.DB, systemPrompt, userMessage, 1200);
 
   let talentProfile: TalentProfile | null = extractJSON<TalentProfile>(response);
 

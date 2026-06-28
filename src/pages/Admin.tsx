@@ -34,12 +34,15 @@ interface UserDetailUsage {
   features: FeatureStat[];
 }
 
+interface AIModelOption {
+  value: string;
+  label: string;
+}
+
 interface AIConfig {
-  api_base_url: string;
-  api_key_masked: string;
   model: string;
-  configured: boolean;
   updated_at: string | null;
+  available_models: AIModelOption[];
 }
 
 type AIMessageKind = 'success' | 'danger' | 'info' | 'warning';
@@ -103,7 +106,8 @@ export function Admin() {
   // AI 配置相关状态
   const [aiConfig, setAIConfig] = useState<AIConfig | null>(null);
   const [aiConfigLoading, setAIConfigLoading] = useState(false);
-  const [aiForm, setAIForm] = useState({ api_base_url: '', api_key: '', model: '' });
+  const [aiForm, setAIForm] = useState<{ model: string }>({ model: '' });
+  const [availableModels, setAvailableModels] = useState<AIModelOption[]>([]);
   const [savingAI, setSavingAI] = useState(false);
   const [testingAI, setTestingAI] = useState(false);
   const [aiMessage, setAIMessage] = useState<AIMessage | null>(null);
@@ -139,12 +143,8 @@ export function Admin() {
       const res = await adminApi.getAIConfig();
       const cfg = res as AIConfig;
       setAIConfig(cfg);
-      // 预填表单（密钥留空，由 placeholder 显示掩码值）
-      setAIForm({
-        api_base_url: cfg.api_base_url || '',
-        api_key: '',
-        model: cfg.model || '',
-      });
+      setAIForm({ model: cfg.model || '' });
+      setAvailableModels(cfg.available_models || []);
     } catch (e) {
       setAIMessage({
         kind: 'danger',
@@ -224,13 +224,9 @@ export function Admin() {
     setSavingAI(true);
     setAIMessage(null);
     try {
-      await adminApi.updateAIConfig({
-        api_base_url: aiForm.api_base_url.trim(),
-        api_key: aiForm.api_key,
-        model: aiForm.model.trim(),
-      });
+      await adminApi.updateAIConfig({ model: aiForm.model.trim() });
       setAIMessage({ kind: 'success', text: 'AI 配置已保存' });
-      // 刷新配置状态（同步 updated_at 与掩码密钥）
+      // 刷新配置状态（同步 updated_at）
       await loadAIConfig();
     } catch (e) {
       setAIMessage({
@@ -250,7 +246,7 @@ export function Admin() {
       const data = res as { message: string; reply: string; model: string };
       setAIMessage({
         kind: 'success',
-        text: `连接成功！AI回复: ${data.reply}`,
+        text: `连接成功！AI 回复: ${data.reply}`,
       });
     } catch (e) {
       setAIMessage({
@@ -495,15 +491,17 @@ export function Admin() {
       {tab === 'ai' && (
         <div>
           <div className="card">
-            <h3 className="card-title">AI 接口配置</h3>
+            <h3 className="card-title">AI 模型配置</h3>
 
             <div className="alert alert-info" style={{ marginTop: 12 }}>
-              配置 OpenAI 兼容的 API 接口。支持 OpenAI、DeepSeek、通义千问等兼容 OpenAI 格式的服务。配置后所有 AI
-              功能（天赋测评、专业匹配、学校推荐、防骗检测）将使用此接口。
+              知遇使用 Cloudflare Workers AI 提供智能服务。Workers AI 每天有 10,000 Neurons 的免费额度，无需额外配置
+              API 密钥。只需选择一个适合的模型即可。
             </div>
 
-            {aiConfig && !aiConfig.configured && (
-              <div className="alert alert-warning">AI 尚未配置，用户无法使用 AI 功能</div>
+            {aiConfig?.updated_at && (
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
+                上次更新时间: {formatDate(aiConfig.updated_at)}
+              </div>
             )}
 
             {aiMessage && <div className={alertClass(aiMessage.kind)}>{aiMessage.text}</div>}
@@ -515,49 +513,23 @@ export function Admin() {
             ) : (
               <>
                 <div className="form-group">
-                  <label className="form-label">API 地址</label>
-                  <input
-                    className="form-input"
-                    type="text"
-                    value={aiForm.api_base_url}
-                    placeholder="https://api.openai.com/v1"
-                    onChange={(e) => setAIForm({ ...aiForm, api_base_url: e.target.value })}
-                  />
-                  <div className="form-hint">
-                    OpenAI: https://api.openai.com/v1 | DeepSeek: https://api.deepseek.com/v1 |
-                    其他兼容服务请填对应的 /v1 结尾地址
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">API 密钥</label>
-                  <input
-                    className="form-input"
-                    type="password"
-                    value={aiForm.api_key}
-                    placeholder={aiConfig?.api_key_masked || '请输入 API 密钥'}
-                    onChange={(e) => setAIForm({ ...aiForm, api_key: e.target.value })}
-                  />
-                  <div className="form-hint">如仅需修改地址或模型而不换密钥，此处留空即可保持原有密钥不变</div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">模型名称</label>
-                  <input
-                    className="form-input"
-                    type="text"
+                  <label className="form-label">选择模型</label>
+                  <select
+                    className="form-select"
                     value={aiForm.model}
-                    placeholder="gpt-4o-mini"
                     onChange={(e) => setAIForm({ ...aiForm, model: e.target.value })}
-                  />
-                  <div className="form-hint">常用模型: gpt-4o-mini / gpt-4o / deepseek-chat / qwen-plus 等</div>
-                </div>
-
-                {aiConfig?.updated_at && (
-                  <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
-                    上次更新时间: {formatDate(aiConfig.updated_at)}
+                  >
+                    {availableModels.length === 0 && <option value="">暂无可用模型</option>}
+                    {availableModels.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="form-hint">
+                    推荐使用 Qwen3 30B，中文理解能力最强且性价比高。不同模型的消耗不同，可在使用统计中查看。
                   </div>
-                )}
+                </div>
 
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   <button
@@ -586,7 +558,8 @@ export function Admin() {
           </div>
 
           <div className="alert alert-info" style={{ marginTop: 16, fontSize: 13 }}>
-            提示: 每次AI调用都会消耗token。可在"使用统计"tab中查看各用户token消耗明细。
+            提示: Workers AI 每天免费 10,000 Neurons。每次 AI 调用（天赋测评、专业匹配、学校推荐、防骗检测）都会消耗
+            Neurons。可在「使用统计」中查看各用户消耗明细。
           </div>
         </div>
       )}

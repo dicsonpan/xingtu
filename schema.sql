@@ -92,13 +92,10 @@ CREATE TABLE IF NOT EXISTS fraud_checks (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- 系统设置表（AI配置等）
+-- 系统设置表（AI模型配置）
 CREATE TABLE IF NOT EXISTS system_settings (
   id INTEGER PRIMARY KEY DEFAULT 1,
-  -- AI 接口配置 (OpenAI 兼容格式)
-  api_base_url TEXT,    -- 如 https://api.openai.com/v1
-  api_key TEXT,         -- API 密钥
-  model TEXT,           -- 如 gpt-4o-mini
+  model TEXT,           -- Cloudflare Workers AI 模型名称
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_by INTEGER REFERENCES users(id),
   CHECK (id = 1)

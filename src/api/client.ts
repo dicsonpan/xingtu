@@ -91,8 +91,8 @@ export const adminApi = {
   unban: (id: number) => request(`/admin/users/${id}/unban`, { method: 'POST' }),
   stats: () => request<any>('/admin/stats'),
   // AI 配置
-  getAIConfig: () => request<{ api_base_url: string; api_key_masked: string; model: string; configured: boolean; updated_at: string | null }>('/admin/ai-config'),
-  updateAIConfig: (body: { api_base_url: string; api_key: string; model: string }) =>
+  getAIConfig: () => request<{ model: string; updated_at: string | null; available_models: { value: string; label: string }[] }>('/admin/ai-config'),
+  updateAIConfig: (body: { model: string }) =>
     request('/admin/ai-config', { method: 'PUT', body: JSON.stringify(body) }),
   testAIConfig: () => request<{ message: string; reply: string; model: string }>('/admin/ai-config/test', { method: 'POST' }),
 };
