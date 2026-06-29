@@ -12,6 +12,7 @@ export const AVAILABLE_MODELS = [
   { value: '@cf/openai/gpt-oss-120b', label: 'GPT-OSS 120B (OpenAI开源) — 能力最强' },
   { value: '@cf/zai-org/glm-5.2', label: 'GLM-5.2 (智谱) — 中文优秀，综合能力强' },
   { value: '@cf/moonshotai/kimi-k2.7-code', label: 'Kimi K2.7 Code (月之暗面) — 推理能力强，长上下文' },
+  { value: '@cf/nvidia/nemotron-3-120b-a12b', label: 'Nemotron 3 120B (NVIDIA) — MoE架构，多智能体优化' },
 ];
 
 interface AIResponse {
